@@ -1,0 +1,235 @@
+/* My Ansi-compatible Base library for C */
+#include <ABC/base.h>         /* Core */
+
+/* kazmath, the matrix and vector maths library */
+#include <kazmath/kazmath.h>
+
+/* Project headers */
+#include "window.h"
+#include "object.h"
+
+/* Camera */
+kmVec3 cameraPos    = { 0.0f, 0.0f,  3.0f };
+kmVec3 cameraFront  = { 0.0f, 0.0f, -1.0f };
+kmVec3 cameraUp     = { 0.0f, 1.0f,  0.0f };
+f32 pitch = 0.0f;
+f32 yaw   = -90.0f;
+kmVec3 cameraVelocity = { 0.0f, 0.0f, 0.0f };
+
+/* Texture info */
+const char* t_names[2] = { "tex", "normals" };
+const char* t_paths[2] = { "basecolor.jpg", "normal.jpg" };
+const char* t_paths2[2] = { "basecolor2.png", "normal2.png" };
+
+/* Objects */
+Object suzanne;
+Object scene;
+
+/* Matrices */
+kmMat4 view;
+kmMat4 projection;
+
+/* Timing */
+f32 deltaTime = 0.0f;
+u32 ticks = 0.0f;
+
+/* Toggle-able things */
+bool wireframeMode = false;
+bool gammaCorrection = false;
+
+/* Entry point */
+i32 main() {
+  /* The window */
+  WindowGL window;
+  WindowGL* p_window;
+  /* Initialize libraries (SDL2, GLAD) */
+  initLibraries();
+  /* Create window */
+  window = createWindowGL("SDL2 and GLAD Test");
+  p_window = &window;
+  /* Intialize GLAD - part 2 */
+  makeCurrent(&window);
+  initGLAD(&window);
+
+  /* Create Objects */
+  { /* Suzanne */
+    ObjectCreateInfo createInfo;
+    createInfo.frag_path = "main.frag";
+    createInfo.vert_path = "main.vert";
+    createInfo.texture_names = (char**)t_names;
+    createInfo.texture_paths = (char**)t_paths2;
+    createInfo.numTextures = 2;
+    createInfo.obj_path = "suzanne.obj";
+    suzanne = createObject(createInfo);
+  }
+  { /* Scene */
+    ObjectCreateInfo createInfo;
+    createInfo.frag_path = "main.frag";
+    createInfo.vert_path = "main.vert";
+    createInfo.texture_names = (char**)t_names;
+    createInfo.texture_paths = (char**)t_paths;
+    createInfo.numTextures = 2;
+    createInfo.obj_path = "scene.obj";
+    scene = createObject(createInfo);
+  }
+
+  /* Main loop */
+  while (window.running) {
+    /* deltaTime p1 */
+    u64 start = SDL_GetPerformanceCounter();
+    /* Update events */
+    updateWindowsGL(&p_window, 1);
+    
+    /* Make current */
+    makeCurrent(&window);
+    /* Clear screen */
+    /* clearWindowGL(0.3, 0.5f, 1.0f); */
+    clearWindowGL(0.2f, 0.2f, 0.2f);
+    
+    /* Process keyboard input */
+    if (window.keys[SDL_SCANCODE_1]) wireframeMode = true;
+    if (window.keys[SDL_SCANCODE_1] && window.keys[SDL_SCANCODE_RSHIFT])
+      wireframeMode = false;
+    if (window.keys[SDL_SCANCODE_2]) gammaCorrection = true;
+    if (window.keys[SDL_SCANCODE_2] && window.keys[SDL_SCANCODE_RSHIFT])
+      gammaCorrection = false;
+    if (wireframeMode)
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    else
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    if (gammaCorrection)
+      glEnable(GL_FRAMEBUFFER_SRGB);
+    else
+      glDisable(GL_FRAMEBUFFER_SRGB);
+
+    if (window.keys[SDL_SCANCODE_W]) {
+      kmVec3 tmp;
+      kmVec3 front2 = { 0.0f, 0.0f, 0.0f };
+      front2.x = cameraFront.x;
+      front2.z = cameraFront.z;
+      kmVec3Scale(&tmp, &front2, 0.005f);
+      kmVec3Add(&cameraVelocity, &cameraVelocity, &tmp);
+    }
+    if (window.keys[SDL_SCANCODE_S]) {
+      kmVec3 tmp;
+      kmVec3 front2 = { 0.0f, 0.0f, 0.0f };
+      front2.x = cameraFront.x;
+      front2.z = cameraFront.z;
+      kmVec3Scale(&tmp, &front2, 0.0025f);
+      kmVec3Subtract(&cameraVelocity, &cameraVelocity, &tmp);
+    }
+    if (window.keys[SDL_SCANCODE_A]) {
+      kmVec3 tmp;
+      kmVec3 front2 = { 0.0f, 0.0f, 0.0f };
+      front2.x = cameraFront.x;
+      front2.z = cameraFront.z;
+      kmVec3Cross(&tmp, &front2, &cameraUp);
+      kmVec3Normalize(&tmp, &tmp);
+      kmVec3Scale(&tmp, &tmp, 0.0025f);
+      kmVec3Subtract(&cameraVelocity, &cameraVelocity, &tmp);
+    }
+    if (window.keys[SDL_SCANCODE_D]) {
+      kmVec3 tmp;
+      kmVec3 front2 = { 0.0f, 0.0f, 0.0f };
+      front2.x = cameraFront.x;
+      front2.z = cameraFront.z;
+      kmVec3Cross(&tmp, &front2, &cameraUp);
+      kmVec3Normalize(&tmp, &tmp);
+      kmVec3Scale(&tmp, &tmp, 0.0025f);
+      kmVec3Add(&cameraVelocity, &cameraVelocity, &tmp);
+    }
+    if (window.keys[SDL_SCANCODE_LEFT]) yaw -= 0.3f;
+    if (window.keys[SDL_SCANCODE_RIGHT]) yaw += 0.3f;
+    if (window.keys[SDL_SCANCODE_UP]) pitch += 0.3f;
+    if (window.keys[SDL_SCANCODE_DOWN]) pitch -= 0.3f;
+    if (pitch < -89.9f) pitch = -89.9f;
+    if (pitch > 89.9f) pitch = 89.9f;
+    if (window.keys[SDL_SCANCODE_SPACE])
+      cameraVelocity.y += 0.005f;
+    if (window.keys[SDL_SCANCODE_LSHIFT])
+      cameraVelocity.y -= 0.005f;
+    {
+      kmVec3 tmp;
+      kmVec3Scale(&tmp, &cameraVelocity, 0.2f);
+      kmVec3Add(&cameraPos, &cameraPos, &tmp);
+    }
+    cameraVelocity.x /= 1.015f;
+    cameraVelocity.y /= 1.015f;
+    cameraVelocity.z /= 1.015f;
+    
+    /* Update model view projection */
+    /* model */
+    kmMat4Identity(&suzanne.model);
+    {
+      kmMat4 translation;
+      kmMat4 rotation;
+      /* kmVec3 axis = { 0.5f, 0.7f, 0.2f }; */
+      kmVec3 axis = { 0.0f, 1.0f, 0.0f };
+      kmMat4Identity(&translation);
+      kmMat4Translation(&translation, 0.0f, 0.75f, 0.0f);
+      kmMat4Identity(&rotation);
+      kmMat4RotationAxisAngle(&rotation, &axis, SDL_GetTicks64() / 1500.0f);
+      kmMat4Multiply(&suzanne.model, &translation, &rotation);
+    }
+    kmMat4Identity(&scene.model);
+    {
+      kmMat4 translation;
+      kmMat4 rotation;
+      kmVec3 axis = { 0.0f, 1.0f, 0.0f };
+      kmMat4Identity(&translation);
+      kmMat4Translation(&translation, 0.0f, -0.5f, 0.0f);
+      kmMat4Identity(&rotation);
+      kmMat4RotationAxisAngle(&rotation, &axis, kmDegreesToRadians(270.0f));
+      kmMat4Multiply(&scene.model, &translation, &rotation);
+    }
+    /* view */
+    {
+      kmVec3 tmp;
+      kmVec3Add(&tmp, &cameraPos, &cameraFront);
+      kmMat4LookAt(&view, &cameraPos, &tmp, &cameraUp);
+    }
+    {
+      kmVec3 direction;
+      direction.x = cos(kmDegreesToRadians(yaw)) * cos(kmDegreesToRadians(pitch));
+      direction.y = sin(kmDegreesToRadians(pitch));
+      direction.z = sin(kmDegreesToRadians(yaw)) * cos(kmDegreesToRadians(pitch));
+      kmVec3Normalize(&cameraFront, &direction);
+    }
+    /* projection */
+    kmMat4Identity(&projection);
+    kmMat4PerspectiveProjection(
+        &projection,
+        60.0f,
+        (f32)window.width / window.height,
+        0.1f, 100.0f
+    );
+    
+    /* Draw scene */
+    drawObject(&suzanne, view, projection, cameraPos);
+    drawObject(&scene, view, projection, cameraPos);
+
+    /* Present screen */
+    presentWindowGL(&window);
+
+    /* Change title */
+    if (ticks % 200 == 0) {
+      char title[48];
+      f32 fps = deltaTime != 0.0f ? 1000.0f / deltaTime : 0.0f;
+      sprintf(title, "FPS: %f\tDelta Time: %f\t", fps, deltaTime);
+      SDL_SetWindowTitle(window.handle, title);
+    } ticks++;
+
+    /* deltaTime p2 */
+    {
+      u64 end = SDL_GetPerformanceCounter();
+      deltaTime =
+        (end - start) / (f32)SDL_GetPerformanceFrequency() * 1000.0f;
+    }
+  }
+
+  /* Destroy objects */
+  destroyObject(&suzanne);
+  destroyObject(&scene);
+
+  return 0;
+}
