@@ -1,5 +1,6 @@
 CFLAGS = -ansi -pedantic -Wall -Wextra -O3 -ffast-math
-LDFLAGS = -Wl,--copy-dt-needed-entries -lSDL2 -lSDL2_image -lABC -lGL -lkazmath
+LDFLAGS = -Wl,--copy-dt-needed-entries \
+					-lSDL2 -lSDL2_image -lSDL2_ttf -lABC -lGL -lkazmath
 
 GLAD_DIR=glad
 
@@ -33,11 +34,8 @@ test: $(BUILD_DIR)/main_test
 	rm -rf $(BUILD_DIR)/main_test
 
 build: $(BUILD_DIR)/main
-	cp *.frag $(BUILD_DIR)/
-	cp *.vert $(BUILD_DIR)/
-	cp *.png $(BUILD_DIR)/
-	cp *.jpg $(BUILD_DIR)/
-	cp *.obj $(BUILD_DIR)/
+	mkdir $(BUILD_DIR)/assets
+	cp assets/* build/assets
 
 gdb: $(BUILD_DIR)/main_gdb
 	gdb $(BUILD_DIR)/main_gdb

@@ -1,6 +1,9 @@
 /* My Ansi-compatible Base library for C */
 #include <ABC/base.h>         /* Core */
 
+/* SDL TTF, for rendering true type fonts in SDL2 */
+#include <SDL2/SDL_ttf.h>
+
 /* kazmath, the matrix and vector maths library */
 #include <kazmath/kazmath.h>
 
@@ -18,8 +21,8 @@ kmVec3 cameraVelocity = { 0.0f, 0.0f, 0.0f };
 
 /* Texture info */
 const char* t_names[2] = { "tex", "normals" };
-const char* t_paths[2] = { "basecolor.jpg", "normal.jpg" };
-const char* t_paths2[2] = { "basecolor2.png", "normal2.png" };
+const char* t_paths[2] = { "assets/basecolor.jpg", "assets/normal.jpg" };
+const char* t_paths2[2] = { "assets/basecolor2.png", "assets/normal2.png" };
 
 /* Objects */
 Object suzanne;
@@ -37,16 +40,25 @@ u32 ticks = 0.0f;
 bool wireframeMode = false;
 bool gammaCorrection = false;
 
+/* Font */
+TTF_Font* font;
+
 /* Entry point */
 i32 main() {
   /* The window */
-  WindowGL window;
-  WindowGL* p_window;
+  Window window;
+  Window window2;
+  Window* p_windows[2];
+  u32 numWindows = 2;
   /* Initialize libraries (SDL2, GLAD) */
   initLibraries();
   /* Create window */
-  window = createWindowGL("SDL2 and GLAD Test");
-  p_window = &window;
+  window = createWindowGL("SDL2 and GLAD Test", 1280, 720);
+  window2 = createWindow("Test Window 2", 100, 720);
+  p_windows[0] = &window;
+  p_windows[1] = &window2;
+  /* Create font */
+  font = TTF_OpenFont("assets/font.ttf", 24);
   /* Intialize GLAD - part 2 */
   makeCurrent(&window);
   initGLAD(&window);
@@ -54,22 +66,22 @@ i32 main() {
   /* Create Objects */
   { /* Suzanne */
     ObjectCreateInfo createInfo;
-    createInfo.frag_path = "main.frag";
-    createInfo.vert_path = "main.vert";
+    createInfo.frag_path = "assets/main.frag";
+    createInfo.vert_path = "assets/main.vert";
     createInfo.texture_names = (char**)t_names;
     createInfo.texture_paths = (char**)t_paths2;
     createInfo.numTextures = 2;
-    createInfo.obj_path = "suzanne.obj";
+    createInfo.obj_path = "assets/suzanne.obj";
     suzanne = createObject(createInfo);
   }
   { /* Scene */
     ObjectCreateInfo createInfo;
-    createInfo.frag_path = "main.frag";
-    createInfo.vert_path = "main.vert";
+    createInfo.frag_path = "assets/main.frag";
+    createInfo.vert_path = "assets/main.vert";
     createInfo.texture_names = (char**)t_names;
     createInfo.texture_paths = (char**)t_paths;
     createInfo.numTextures = 2;
-    createInfo.obj_path = "scene.obj";
+    createInfo.obj_path = "assets/scene.obj";
     scene = createObject(createInfo);
   }
 
@@ -78,12 +90,32 @@ i32 main() {
     /* deltaTime p1 */
     u64 start = SDL_GetPerformanceCounter();
     /* Update events */
-    updateWindowsGL(&p_window, 1);
+    updateWindows(p_windows, numWindows);
+    if (window2.running) {
+      /* Clear screen */
+      clearWindow(&window2, 0x30, 0x40, 0xff);
+      /* Draw */
+      {
+        SDL_Rect textRect = { 0, 0, 0, 0 };
+        SDL_Color textColor = { 255, 255, 255, 255 };
+        SDL_Surface* textSurface;
+        SDL_Texture* textTexture;
+        textSurface =
+          TTF_RenderText_Solid(font, "Test", textColor);
+        textTexture =
+          SDL_CreateTextureFromSurface(window2.rendering.renderer, textSurface);
+        TTF_SizeText(font, "Test", &textRect.w, &textRect.h);
+        SDL_RenderCopy(window2.rendering.renderer, textTexture, NULL, &textRect);
+        SDL_FreeSurface(textSurface);
+        SDL_DestroyTexture(textTexture);
+      }
+      /* Present */
+      presentWindow(&window2);
+    }
     
     /* Make current */
     makeCurrent(&window);
     /* Clear screen */
-    /* clearWindowGL(0.3, 0.5f, 1.0f); */
     clearWindowGL(0.2f, 0.2f, 0.2f);
     
     /* Process keyboard input */
@@ -230,6 +262,7 @@ i32 main() {
   /* Destroy objects */
   destroyObject(&suzanne);
   destroyObject(&scene);
-
+  /* Destroy font */
+  TTF_CloseFont(font);
   return 0;
 }

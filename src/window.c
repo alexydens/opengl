@@ -6,6 +6,7 @@ void initLibraries() {
   printf("INFO: Initializing SDL2...\n");
 #endif
   SDL_Init(SDL_INIT_EVERYTHING);
+  TTF_Init();
 
   /* Load OpenGL */
 #if defined(DEBUG)
@@ -22,7 +23,7 @@ void initLibraries() {
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 }
 /* HAS to be called after window creation */
-void initGLAD(WindowGL* state) {
+void initGLAD(Window* state) {
 #if defined(DEBUG)
   printf("INFO: Loading GLAD...\n");
 #endif
@@ -41,15 +42,15 @@ void initGLAD(WindowGL* state) {
 }
 
 /* Create a window with an OpenGL context */
-WindowGL createWindowGL(const char* title) {
-  WindowGL state;
+Window createWindowGL(const char* title, u32 w, u32 h) {
+  Window state;
 #if defined(DEBUG)
   printf("INFO: Creating window...\n");
 #endif
   state.handle = SDL_CreateWindow(
-      title, 0, 0, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-  state.width = 1280;
-  state.height = 720;
+      title, 0, 0, w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+  state.width = w;
+  state.height = h;
   if (!state.handle) {
 #if defined(DEBUG)
     printf("FATAL: Window creation failed.\n");
@@ -58,16 +59,13 @@ WindowGL createWindowGL(const char* title) {
   }
 
   /* Create OpenGL context */
-  state.gl_context = SDL_GL_CreateContext(state.handle);
-  if (!state.gl_context) {
+  state.rendering.gl_context = SDL_GL_CreateContext(state.handle);
+  if (!state.rendering.gl_context) {
 #if defined(DEBUG)
     printf("FATAL: Failed to create OpenGL context for window\n");
 #endif
     exit(-1);
   }
-
-  /* Not exactly sure what this does... */
-  SDL_GL_SetSwapInterval(1);
 
   /* Make keys point to sdl's keyboard state */
   state.keys = SDL_GetKeyboardState(0);
@@ -75,14 +73,51 @@ WindowGL createWindowGL(const char* title) {
   /* Intialize running */
   state.running = true;
 
+  /* Set is_windowgl */
+  state.is_windowgl = true;
+
   return state;
 }
-void destroyWindowGL(WindowGL* state) {
+void destroyWindowGL(Window* state) {
+  SDL_DestroyWindow(state->handle);
+}
+/* Create a window without an OpenGL context */
+Window createWindow(const char* title, u32 w, u32 h) {
+  Window state;
+#if defined(DEBUG)
+  printf("INFO: Creating window...\n");
+#endif
+  state.handle = SDL_CreateWindow(
+      title, 0, 0, w, h, SDL_WINDOW_RESIZABLE);
+  state.width = w;
+  state.height = h;
+  if (!state.handle) {
+#if defined(DEBUG)
+    printf("FATAL: Window creation failed.\n");
+#endif
+    exit(-1);
+  }
+
+  /* Create a renderer */
+  state.rendering.renderer = SDL_CreateRenderer(state.handle, 0, SDL_RENDERER_ACCELERATED);
+
+  /* Make keys point to sdl's keyboard state */
+  state.keys = SDL_GetKeyboardState(0);
+
+  /* Intialize running */
+  state.running = true;
+
+  /* Set is_windowgl */
+  state.is_windowgl = false;
+
+  return state;
+}
+void destroyWindow(Window* state) {
   SDL_DestroyWindow(state->handle);
 }
 
 /* Update the window events */
-void updateWindowsGL(WindowGL** states, u32 numWindows) {
+void updateWindows(Window** states, u32 numWindows) {
   SDL_Event event;
   /* Check for quit or window events */
   while (SDL_PollEvent(&event)) {
@@ -91,20 +126,24 @@ void updateWindowsGL(WindowGL** states, u32 numWindows) {
         {
           u32 i;
           for (i = 0; i < numWindows; i++) {
-            WindowGL* state = states[i];
+            Window* state = states[i];
             if (SDL_GetWindowID(state->handle) == event.window.windowID) {
               switch (event.window.event) {
                 case SDL_WINDOWEVENT_RESIZED:
                   {
                     state->width = event.window.data1;
                     state->height = event.window.data2;
-                    glViewport(0, 0, state->width, state->height);
+                    if (state->is_windowgl) {
+                      SDL_GL_MakeCurrent(state->handle, state->rendering.gl_context);
+                      glViewport(0, 0, state->width, state->height);
+                    }
                   }
                   break;
                 case SDL_WINDOWEVENT_CLOSE:
                   {
                     state->running = false;
-                    destroyWindowGL(state);
+                    if (state->is_windowgl) destroyWindowGL(state);
+                    else destroyWindow(state);
                   }
                   break;
               }
@@ -123,11 +162,20 @@ void clearWindowGL(f32 r, f32 g, f32 b) {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 /* Present the window's framebuffer (swap buffers) */
-void presentWindowGL(WindowGL* state) {
+void presentWindowGL(Window* state) {
   SDL_GL_SwapWindow(state->handle);
+}
+/* Clear the window's framebuffer */
+void clearWindow(Window* state, u32 r, u32 g, u32 b) {
+  SDL_SetRenderDrawColor(state->rendering.renderer, r, g, b, 0xff);
+  SDL_RenderClear(state->rendering.renderer);
+}
+/* Present the window's framebuffer (swap buffers) */
+void presentWindow(Window* state) {
+  SDL_RenderPresent(state->rendering.renderer);
 }
 
 /* Makes the window's OpenGL context current (needed for multiple windows) */
-void makeCurrent(WindowGL* state) {
-  SDL_GL_MakeCurrent(state->handle, state->gl_context);
+void makeCurrent(Window* state) {
+  SDL_GL_MakeCurrent(state->handle, state->rendering.gl_context);
 }

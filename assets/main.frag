@@ -7,6 +7,14 @@ uniform vec3 cameraPos;
 uniform sampler2D tex;
 uniform sampler2D normals;
 
+struct Material {
+  float ambient;
+  float diffuse;
+  float specular;
+  float specularPow;
+};
+uniform Material material;
+
 out vec4 FragColor;
 
 vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir);
@@ -31,14 +39,17 @@ void main() {
   vec3 lightDir = vec3(1.0);
   vec3 lightCol = vec3(1.0, 1.0, 1.0);
 
-  float ambient = 0.2;
+  float ambient = material.ambient;//0.2;
   
   float lambertianDiffuse =
-    dot(normalize(lightDir), normalize(tbn * m_normal)) * 0.75f;
+    dot(normalize(lightDir), normalize(tbn * m_normal)) * material.diffuse;//0.75f;
 
   vec3 reflectDir = reflect(-lightDir, tbn * m_normal);
-  float specular = pow(max(dot(viewDir, reflectDir), 0.0), 8) * 0.05f;
+  float specular =
+  pow(
+  max(
+  dot(viewDir, reflectDir), 0.0), material.specularPow) * material.specular;//0.05f;
 
-  float illumination = min(max(max(lambertianDiffuse, ambient), specular), 1.0);
+  float illumination = max(max(lambertianDiffuse, ambient), specular);
   FragColor = vec4(texture(tex, texCoord).xyz * illumination * lightCol, 1.0);
 }

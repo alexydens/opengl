@@ -25,6 +25,12 @@ Object createObject(ObjectCreateInfo createInfo) {
   /* Create model matrix */
   kmMat4Identity(&object.model);
 
+  /* Create material */
+  object.material.ambient = 0.3f;
+  object.material.diffuse = 0.7f;
+  object.material.specular = 0.2f;
+  object.material.specularPow = 4;
+
   return object;
 }
 void destroyObject(Object* object) {
@@ -49,6 +55,22 @@ void drawObject(Object* object, kmMat4 view, kmMat4 projection, kmVec3 camPos) {
       glGetUniformLocation(
         object->shader, "projection"
       ), 1, GL_FALSE, projection.mat);
+  glUniform1f(
+      glGetUniformLocation(
+        object->shader, "material.ambient"),
+      object->material.ambient);
+  glUniform1f(
+      glGetUniformLocation(
+        object->shader, "material.diffuse"),
+      object->material.diffuse);
+  glUniform1f(
+      glGetUniformLocation(
+        object->shader, "material.specular"),
+      object->material.specular);
+  glUniform1f(
+      glGetUniformLocation(
+        object->shader, "material.specularPow"),
+      object->material.specularPow);
   glUniform3fv(glGetUniformLocation(object->shader, "cameraPos"), 1, (f32*)&camPos);
   drawMesh(&object->mesh);
 }

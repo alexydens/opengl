@@ -6,14 +6,7 @@
 
 /* Project headers */
 #include "window.h"
-#include "mesh.h"
-#include "shader.h"
-#include "texture.h"
-#include "obj_parser.h"
-
-/* Vertex data */
-VertexBuffer vBuffer;
-VertexBuffer vBufferScene;
+#include "object.h"
 
 /* Camera */
 kmVec3 cameraPos    = { 0.0f, 0.0f,  3.0f };
@@ -23,16 +16,16 @@ f32 pitch = 0.0f;
 f32 yaw   = -90.0f;
 kmVec3 cameraVelocity = { 0.0f, 0.0f, 0.0f };
 
-/* Texture */
-Texture texture;
-const char* t_paths[2] = { "basecolor.jpg", "normal.jpg" };
+/* Texture info */
 const char* t_names[2] = { "tex", "normals" };
-Texture texture2;
-const char* t_paths2[2] = { "basecolor2.png", "normal2.png" };
-const char* t_names2[2] = { "tex", "normals" };
+const char* t_paths[2] = { "assets/basecolor.jpg", "assets/normal.jpg" };
+const char* t_paths2[2] = { "assets/basecolor2.png", "assets/normal2.png" };
+
+/* Objects */
+Object suzanne;
+Object scene;
 
 /* Matrices */
-kmMat4 model;
 kmMat4 view;
 kmMat4 projection;
 
@@ -47,16 +40,8 @@ bool gammaCorrection = false;
 /* Entry point */
 i32 main() {
   /* The window */
-  WindowGL window;
-  WindowGL* p_window;
-  /* Meshes */
-  Mesh mesh;
-  MeshCreateInfo meshCreateInfo;
-  Mesh scene;
-  MeshCreateInfo sceneCreateInfo;
-  u32 attribs[3] = { 3, 2, 3 };
-  /* Shader */
-  ShaderHandle shader;
+  Window window;
+  Window* p_window;
   /* Initialize libraries (SDL2, GLAD) */
   initLibraries();
   /* Create window */
@@ -66,40 +51,34 @@ i32 main() {
   makeCurrent(&window);
   initGLAD(&window);
 
-  /* Create mesh */
-  vBuffer = createVertexBuffer("suzanne.obj");
-  meshCreateInfo.attribs = attribs;
-  meshCreateInfo.numAttribs = 3;
-  meshCreateInfo.vertices = vBuffer.data;
-  meshCreateInfo.numVertices = vBuffer.vertexCount;
-  mesh = createMesh(meshCreateInfo);
-
-  vBufferScene = createVertexBuffer("scene.obj");
-  sceneCreateInfo.attribs = attribs;
-  sceneCreateInfo.numAttribs = 3;
-  sceneCreateInfo.vertices = vBufferScene.data;
-  sceneCreateInfo.numVertices = vBufferScene.vertexCount;
-  scene = createMesh(sceneCreateInfo);
-
-  /* Print some debug info */
-#if defined(DEBUG)
-  printf("Number of triangles being drawn: %d\n",
-      (vBufferScene.vertexCount + vBuffer.vertexCount) / 3);
-#endif
-
-  /* Create shader */
-  shader = createShader("main.vert", "main.frag");
-
-  /* Create texture */
-  texture = createTexture(t_paths, t_names, 2, shader);
-  texture2 = createTexture(t_paths2, t_names2, 2, shader);
+  /* Create Objects */
+  { /* Suzanne */
+    ObjectCreateInfo createInfo;
+    createInfo.frag_path = "assets/main.frag";
+    createInfo.vert_path = "assets/main.vert";
+    createInfo.texture_names = (char**)t_names;
+    createInfo.texture_paths = (char**)t_paths2;
+    createInfo.numTextures = 2;
+    createInfo.obj_path = "assets/suzanne.obj";
+    suzanne = createObject(createInfo);
+  }
+  { /* Scene */
+    ObjectCreateInfo createInfo;
+    createInfo.frag_path = "assets/main.frag";
+    createInfo.vert_path = "assets/main.vert";
+    createInfo.texture_names = (char**)t_names;
+    createInfo.texture_paths = (char**)t_paths;
+    createInfo.numTextures = 2;
+    createInfo.obj_path = "assets/scene.obj";
+    scene = createObject(createInfo);
+  }
 
   /* Main loop */
   while (window.running) {
     /* deltaTime p1 */
     u64 start = SDL_GetPerformanceCounter();
     /* Update events */
-    updateWindowsGL(&p_window, 1);
+    updateWindows(&p_window, 1);
     
     /* Make current */
     makeCurrent(&window);
@@ -128,7 +107,7 @@ i32 main() {
       kmVec3 front2 = { 0.0f, 0.0f, 0.0f };
       front2.x = cameraFront.x;
       front2.z = cameraFront.z;
-      kmVec3Scale(&tmp, &front2, 0.01f);
+      kmVec3Scale(&tmp, &front2, 0.005f);
       kmVec3Add(&cameraVelocity, &cameraVelocity, &tmp);
     }
     if (window.keys[SDL_SCANCODE_S]) {
@@ -136,7 +115,7 @@ i32 main() {
       kmVec3 front2 = { 0.0f, 0.0f, 0.0f };
       front2.x = cameraFront.x;
       front2.z = cameraFront.z;
-      kmVec3Scale(&tmp, &front2, 0.01f);
+      kmVec3Scale(&tmp, &front2, 0.0025f);
       kmVec3Subtract(&cameraVelocity, &cameraVelocity, &tmp);
     }
     if (window.keys[SDL_SCANCODE_A]) {
@@ -146,7 +125,7 @@ i32 main() {
       front2.z = cameraFront.z;
       kmVec3Cross(&tmp, &front2, &cameraUp);
       kmVec3Normalize(&tmp, &tmp);
-      kmVec3Scale(&tmp, &tmp, 0.01f);
+      kmVec3Scale(&tmp, &tmp, 0.0025f);
       kmVec3Subtract(&cameraVelocity, &cameraVelocity, &tmp);
     }
     if (window.keys[SDL_SCANCODE_D]) {
@@ -156,40 +135,31 @@ i32 main() {
       front2.z = cameraFront.z;
       kmVec3Cross(&tmp, &front2, &cameraUp);
       kmVec3Normalize(&tmp, &tmp);
-      kmVec3Scale(&tmp, &tmp, 0.01f);
+      kmVec3Scale(&tmp, &tmp, 0.0025f);
       kmVec3Add(&cameraVelocity, &cameraVelocity, &tmp);
     }
-    if (window.keys[SDL_SCANCODE_LEFT]) {
-      yaw -= 0.75f;
-    }
-    if (window.keys[SDL_SCANCODE_RIGHT]) {
-      yaw += 0.75f;
-    }
-    if (window.keys[SDL_SCANCODE_UP]) {
-      pitch += 0.75f;
-    }
-    if (window.keys[SDL_SCANCODE_DOWN]) {
-      pitch -= 0.75f;
-    }
+    if (window.keys[SDL_SCANCODE_LEFT]) yaw -= 0.3f;
+    if (window.keys[SDL_SCANCODE_RIGHT]) yaw += 0.3f;
+    if (window.keys[SDL_SCANCODE_UP]) pitch += 0.3f;
+    if (window.keys[SDL_SCANCODE_DOWN]) pitch -= 0.3f;
     if (pitch < -89.9f) pitch = -89.9f;
     if (pitch > 89.9f) pitch = 89.9f;
     if (window.keys[SDL_SCANCODE_SPACE])
-      cameraVelocity.y += 0.05f;
+      cameraVelocity.y += 0.005f;
     if (window.keys[SDL_SCANCODE_LSHIFT])
-      cameraVelocity.y -= 0.05f;
+      cameraVelocity.y -= 0.005f;
     {
       kmVec3 tmp;
       kmVec3Scale(&tmp, &cameraVelocity, 0.2f);
       kmVec3Add(&cameraPos, &cameraPos, &tmp);
     }
-    cameraVelocity.x /= 1.03f;
-    cameraVelocity.y /= 1.03f;
-    cameraVelocity.z /= 1.03f;
+    cameraVelocity.x /= 1.015f;
+    cameraVelocity.y /= 1.015f;
+    cameraVelocity.z /= 1.015f;
     
     /* Update model view projection */
-    bindShader(shader);
     /* model */
-    kmMat4Identity(&model);
+    kmMat4Identity(&suzanne.model);
     {
       kmMat4 translation;
       kmMat4 rotation;
@@ -199,7 +169,18 @@ i32 main() {
       kmMat4Translation(&translation, 0.0f, 0.75f, 0.0f);
       kmMat4Identity(&rotation);
       kmMat4RotationAxisAngle(&rotation, &axis, SDL_GetTicks64() / 1500.0f);
-      kmMat4Multiply(&model, &translation, &rotation);
+      kmMat4Multiply(&suzanne.model, &translation, &rotation);
+    }
+    kmMat4Identity(&scene.model);
+    {
+      kmMat4 translation;
+      kmMat4 rotation;
+      kmVec3 axis = { 0.0f, 1.0f, 0.0f };
+      kmMat4Identity(&translation);
+      kmMat4Translation(&translation, 0.0f, -0.5f, 0.0f);
+      kmMat4Identity(&rotation);
+      kmMat4RotationAxisAngle(&rotation, &axis, kmDegreesToRadians(270.0f));
+      kmMat4Multiply(&scene.model, &translation, &rotation);
     }
     /* view */
     {
@@ -222,35 +203,10 @@ i32 main() {
         (f32)window.width / window.height,
         0.1f, 100.0f
     );
-    /* Set them */
-    glUniformMatrix4fv(
-        glGetUniformLocation(shader, "model"), 1, GL_FALSE, model.mat);
-    glUniformMatrix4fv(
-        glGetUniformLocation(shader, "view"), 1, GL_FALSE, view.mat);
-    glUniformMatrix4fv(
-        glGetUniformLocation(shader, "projection"), 1, GL_FALSE, projection.mat);
-    glUniform3fv(
-        glGetUniformLocation(shader, "cameraPos"), 1, (f32*)&cameraPos);
     
     /* Draw scene */
-    bindTexture(&texture2);
-    drawMesh(&mesh);
-    
-    kmMat4Identity(&model);
-    {
-      kmMat4 translation;
-      kmMat4 rotation;
-      kmVec3 axis = { 0.0f, 1.0f, 0.0f };
-      kmMat4Identity(&translation);
-      kmMat4Translation(&translation, 0.0f, -0.5f, 0.0f);
-      kmMat4Identity(&rotation);
-      kmMat4RotationAxisAngle(&rotation, &axis, kmDegreesToRadians(270.0f));
-      kmMat4Multiply(&model, &translation, &rotation);
-    }
-    glUniformMatrix4fv(
-        glGetUniformLocation(shader, "model"), 1, GL_FALSE, model.mat);
-    bindTexture(&texture);
-    drawMesh(&scene);
+    drawObject(&suzanne, view, projection, cameraPos);
+    drawObject(&scene, view, projection, cameraPos);
 
     /* Present screen */
     presentWindowGL(&window);
@@ -271,15 +227,10 @@ i32 main() {
     }
   }
 
-  /* Destroy terxtures */
-  destroyTexture(&texture);
-  destroyTexture(&texture2);
-  /* Delete shader */
-  destroyShader(shader);
-  /* Destroy meshes */
-  destroyMesh(&mesh);
-  destroyVertexBuffer(&vBuffer);
-  destroyMesh(&scene);
-  destroyVertexBuffer(&vBufferScene);
+  /* Destroy objects */
+  destroyObject(&suzanne);
+  destroyObject(&scene);
+  /* Destroy window */
+  destroyWindowGL(p_window);
   return 0;
 }

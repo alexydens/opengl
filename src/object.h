@@ -27,6 +27,13 @@ typedef struct {
 } ObjectCreateInfo;
 
 typedef struct {
+  f32 ambient;
+  f32 diffuse;
+  f32 specular;
+  f32 specularPow;
+} Material;
+
+typedef struct {
   /* Mesh and VertexBuffer */
   Mesh mesh;
   VertexBuffer vBuffer;
@@ -36,6 +43,8 @@ typedef struct {
   Texture texture;
   /* Model matrix */
   kmMat4 model;
+  /* Material */
+  Material material;
 } Object;
 
 /* Create and destroy object */
